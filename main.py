@@ -56,11 +56,39 @@ def main() -> int:
         return 0
 
     assistant = Assistant(cfg, voice=not args.text)
-    if args.text or args.voice_text:
-        assistant.run_text()
-    else:
-        assistant.run_voice()
+    try:
+        if args.text or args.voice_text:
+            assistant.run_text()
+        else:
+            assistant.run_voice()
+    except ModuleNotFoundError as e:
+        _missing_module_help(e)
+        return 1
     return 0
+
+
+_PKG_HINTS = {
+    "faster_whisper": "faster-whisper",
+    "sounddevice": "sounddevice",
+    "soundfile": "soundfile",
+    "torch": "torch",
+    "yaml": "PyYAML",
+    "pyperclip": "pyperclip",
+}
+
+
+def _missing_module_help(err: ModuleNotFoundError) -> None:
+    name = err.name or "?"
+    pkg = _PKG_HINTS.get(name, name)
+    print("\n" + "=" * 62)
+    print(f"  Не установлен пакет: {pkg}")
+    print("=" * 62)
+    print("  Похоже, установка не завершилась. Что делать:\n")
+    print("  1) Запустите install.bat ещё раз и дождитесь надписи 'Готово'.")
+    print("  2) Или установите вручную этой командой:\n")
+    print(f'       "{sys.executable}" -m pip install {pkg}\n')
+    print("  3) Проверить окружение целиком:  python check.py")
+    print("=" * 62)
 
 
 if __name__ == "__main__":

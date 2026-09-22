@@ -120,6 +120,14 @@ tests/               pytest
 
 ## Если что-то не работает
 
+* **`ModuleNotFoundError: No module named 'faster_whisper'`** (или другого пакета) →
+  установка не доехала до конца. Запустите `install.bat` заново и дождитесь надписи
+  «Готово», либо доставьте руками:
+  ```bat
+  .venv\Scripts\python.exe -m pip install -r requirements.txt
+  ```
+  Проверить состояние окружения целиком: `.venv\Scripts\python.exe check.py`
+
 * **Не слышит** → `run.bat --devices`, выберите микрофон по умолчанию в Windows, снизьте `vad_threshold`.
 * **Реагирует на музыку** → повысьте `vad_threshold` до 0.03–0.05.
 * **Голос слишком «роботный»** → уменьшите `robot_depth` до 0.15–0.2.
