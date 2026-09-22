@@ -18,7 +18,17 @@ from glados.assistant import Assistant
 from glados.config import Config
 
 
+def _enable_utf8_console() -> None:
+    """В Windows-консоли stdout часто cp866 — переключаем на UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main() -> int:
+    _enable_utf8_console()
     ap = argparse.ArgumentParser(description="GLaDOS Helper")
     ap.add_argument("-c", "--config", default=None, help="путь к config.yaml")
     ap.add_argument("--text", action="store_true", help="текстовый режим без голоса")

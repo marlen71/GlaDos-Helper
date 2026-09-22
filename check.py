@@ -17,6 +17,19 @@ REQUIRED = [
 OPTIONAL = [("pyperclip", "pyperclip"), ("psutil", "psutil")]
 
 
+def _enable_utf8_console() -> None:
+    """В Windows-консоли stdout часто cp866 — переключаем на UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+_enable_utf8_console()
+
+
+
 def check(mod: str, pkg: str) -> bool:
     try:
         importlib.import_module(mod)
