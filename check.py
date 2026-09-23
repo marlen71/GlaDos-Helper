@@ -82,13 +82,26 @@ def main() -> int:
         else:
             print("  [нет]  Видеокарта NVIDIA не найдена")
 
-        if cuda_is_usable():
+        from glados import cuda_setup
+        from glados.stt import cuda_device_count, cuda_diagnose
+
+        ok, reason = cuda_diagnose()
+        if ok:
             print("  [OK]   CUDA работает — можно ставить stt.device: cuda")
-        elif gpu.present and gpu.supports_cu12:
-            print("  [НЕТ]  библиотеки CUDA не установлены")
-            print("         Установить: install-gpu.bat  (или install.bat -> пункт 2)")
+            print(f"         {cuda_setup.describe()}")
         else:
-            print("  [НЕТ]  ускорение недоступно — Гладос работает на процессоре")
+            print(f"  [НЕТ]  {reason}")
+            dirs = cuda_setup.nvidia_dll_dirs()
+            if dirs:
+                print(f"         Найдены папки библиотек ({len(dirs)}):")
+                for d in dirs[:4]:
+                    print(f"           {d}")
+            else:
+                print("         Пакеты nvidia-* не установлены.")
+                print("         Установить: install-gpu.bat")
+            if cuda_device_count() == 0 and gpu.present:
+                print("         Видеокарта есть, но CUDA её не видит —")
+                print("         обновите драйвер NVIDIA и перезагрузите компьютер.")
     except Exception as e:
         print(f"  не удалось проверить: {e}")
 

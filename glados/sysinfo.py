@@ -45,6 +45,14 @@ class GpuInfo:
 
     @property
     def supports_cu12(self) -> bool:
+        """Поддерживает ли драйвер CUDA 12.
+
+        Если версию определить не удалось (nvidia-smi отдал урезанный вывод),
+        считаем что да: карта есть, а проверку всё равно делает cuda_diagnose().
+        Ложный отказ хуже — он молча лишает человека GPU.
+        """
+        if self.cuda_major == 0:
+            return True
         return self.cuda_major >= 12
 
     def recommended_models(self) -> list[str]:
@@ -72,9 +80,11 @@ def parse_nvidia_smi(text: str) -> GpuInfo:
         info.driver_cuda = m.group(1)
 
     # Строка вида: "| 0  NVIDIA GeForce RTX 3060    WDDM | ... |"
-    m = re.search(r"\|\s*\d+\s+(NVIDIA[^|]*?)\s{2,}", text)
+    m = re.search(r"\|\s*\d+\s+(NVIDIA[^|]*)\|", text)
     if m:
-        info.name = re.sub(r"\s+(On|Off|WDDM|TCC).*$", "", m.group(1)).strip()
+        name = m.group(1)
+        name = re.sub(r"\s+(On|Off|WDDM|TCC|N/A)\s*$", "", name, flags=re.I)
+        info.name = re.sub(r"\s{2,}", " ", name).strip()
 
     # Память: "8192MiB / 12288MiB"
     m = re.search(r"(\d+)MiB\s*/\s*(\d+)MiB", text)
@@ -159,29 +169,16 @@ def cuda_libs_loadable(python: Path | None = None) -> bool:
         return module_installed("nvidia.cublas", python)
 
     code = (
-        "import ctypes, os, sys\n"
-        "try:\n"
-        "    import nvidia, pathlib\n"
-        "    base = pathlib.Path(nvidia.__file__).parent\n"
-        "    for sub in ('cublas/bin', 'cudnn/bin'):\n"
-        "        p = base / sub\n"
-        "        if p.is_dir():\n"
-        "            os.add_dll_directory(str(p))\n"
-        "except Exception:\n"
-        "    pass\n"
-        "ok = True\n"
-        f"for d in {CUDA_DLLS!r}:\n"
-        "    try:\n"
-        "        ctypes.CDLL(d)\n"
-        "    except OSError:\n"
-        "        ok = False\n"
-        "sys.exit(0 if ok else 1)\n"
+        "import sys, pathlib\n"
+        f"sys.path.insert(0, r'{ROOT}')\n"
+        "from glados import cuda_setup\n"
+        "sys.exit(1 if cuda_setup.missing_libraries() else 0)\n"
     )
     try:
         if python is None:
-            for d in CUDA_DLLS:
-                ctypes.CDLL(d)
-            return True
+            from . import cuda_setup
+
+            return not cuda_setup.missing_libraries()
         r = subprocess.run([str(python), "-c", code], capture_output=True, timeout=120)
         return r.returncode == 0
     except Exception:

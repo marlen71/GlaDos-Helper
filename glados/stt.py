@@ -12,7 +12,12 @@ import threading
 
 import numpy as np
 
+from . import cuda_setup
+
 log = logging.getLogger("glados.stt")
+
+# Подключаем pip-пакеты nvidia-* до первого импорта ctranslate2
+cuda_setup.apply()
 
 SR = 16000
 BLOCK = 1024
@@ -102,11 +107,12 @@ class Recognizer:
 
         if device == "auto":
             device = "cuda" if cuda_is_usable() else "cpu"
-        elif device == "cuda" and not cuda_is_usable():
-            log.warning(
-                "В конфиге указан device: cuda, но рабочие CUDA-библиотеки не найдены. "
-                "Переключаюсь на CPU. Как включить GPU — смотрите README, раздел «Ускорение».")
-            device = "cpu"
+        elif device == "cuda":
+            ok, reason = cuda_diagnose()
+            if not ok:
+                log.warning("Не удалось включить GPU: %s", reason)
+                log.warning("Переключаюсь на CPU. Проверить подробности: check.bat")
+                device = "cpu"
 
         self.model = self._load(device, compute)
 
@@ -170,33 +176,41 @@ class Recognizer:
         return " ".join(s.text.strip() for s in segments).strip()
 
 
-def cuda_is_usable() -> bool:
-    """CUDA считается рабочей, только если есть и устройство, и cuBLAS/cuDNN."""
+def cuda_device_count() -> int:
+    """Сколько CUDA-устройств видит система."""
     try:
         import ctranslate2
 
-        if "cuda" not in ctranslate2.get_supported_compute_types("cuda") and \
-                ctranslate2.get_cuda_device_count() == 0:
-            return False
-        if ctranslate2.get_cuda_device_count() == 0:
-            return False
+        return int(ctranslate2.get_cuda_device_count())
     except Exception:
-        try:
-            import torch
+        pass
+    try:
+        import torch
 
-            if not torch.cuda.is_available():
-                return False
-        except Exception:
-            return False
+        return torch.cuda.device_count() if torch.cuda.is_available() else 0
+    except Exception:
+        return 0
 
-    # Проверяем, что нужные DLL действительно загружаются (Windows)
-    if sys.platform.startswith("win"):
-        import ctypes
 
-        for dll in ("cublas64_12.dll", "cudnn_ops64_9.dll"):
-            try:
-                ctypes.CDLL(dll)
-            except OSError:
-                log.debug("Не найдена библиотека %s", dll)
-                return False
-    return True
+def cuda_diagnose() -> tuple[bool, str]:
+    """Проверяет CUDA и объясняет причину отказа.
+
+    Возвращает (работает, причина). Причина пустая, если всё хорошо.
+    """
+    cuda_setup.apply()
+
+    if cuda_device_count() == 0:
+        return False, ("видеокарта NVIDIA не обнаружена библиотекой ctranslate2 "
+                       "(проверьте драйвер командой nvidia-smi)")
+
+    missing = cuda_setup.missing_libraries()
+    if missing:
+        return False, (f"не загружаются библиотеки: {', '.join(missing)}. "
+                       f"Установите их: install-gpu.bat")
+    return True, ""
+
+
+def cuda_is_usable() -> bool:
+    """CUDA считается рабочей, только если есть и устройство, и cuBLAS/cuDNN."""
+    ok, _ = cuda_diagnose()
+    return ok

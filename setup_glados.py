@@ -194,6 +194,7 @@ class Plan:
         self.silero = False
         self.whisper_model: str | None = None
         self.write_config = True
+        self.cuda_works = False
 
     def empty(self) -> bool:
         return not any([self.base, self.torch_cpu, self.torch_gpu, self.whisper,
@@ -382,6 +383,7 @@ def execute(plan: Plan, rep, vpy: Path) -> bool:
     if plan.cuda:
         ok &= pip_install(["nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*"],
                           "Библиотеки CUDA: cuBLAS + cuDNN (~1.1 ГБ)", vpy)
+        plan.cuda_works = verify_cuda(vpy)
 
     if plan.silero:
         ok &= download_silero(vpy)
@@ -390,6 +392,35 @@ def execute(plan: Plan, rep, vpy: Path) -> bool:
         ok &= download_whisper(vpy, plan.whisper_model, use_gpu=plan.cuda or rep.cuda_installed)
 
     return ok
+
+
+def verify_cuda(vpy: Path) -> bool:
+    """Проверяет, что CUDA реально заработала, а не просто скачались пакеты."""
+    out()
+    out("--- Проверяю, работает ли ускорение ---")
+    code = (
+        "import sys\n"
+        f"sys.path.insert(0, r'{ROOT}')\n"
+        "from glados.stt import cuda_diagnose\n"
+        "ok, reason = cuda_diagnose()\n"
+        "print('OK' if ok else 'FAIL: ' + reason)\n"
+        "sys.exit(0 if ok else 1)\n"
+    )
+    r = subprocess.run([str(vpy), "-c", code], capture_output=True, text=True)
+    output = (r.stdout + r.stderr).strip()
+    if r.returncode == 0:
+        out("  [OK] Ускорение GPU работает")
+        return True
+
+    out(f"  [ВНИМАНИЕ] ускорение пока не работает")
+    if output:
+        out(f"  {output.splitlines()[-1]}")
+    out()
+    out("  Гладос будет работать на процессоре — это не помешает запуску.")
+    out("  Частые причины:")
+    out("    • нужен драйвер NVIDIA, поддерживающий CUDA 12 (проверьте: nvidia-smi)")
+    out("    • после установки драйвера нужно перезагрузить компьютер")
+    return True  # не считаем фатальной ошибкой
 
 
 def download_silero(vpy: Path) -> bool:
@@ -435,7 +466,9 @@ def update_config(plan: Plan, rep) -> None:
     if not cfg_path.exists():
         return
 
-    gpu_on = plan.cuda or rep.cuda_installed
+    # Пишем "cuda" только если ускорение реально заработало.
+    # Иначе "auto": Гладос сама включит GPU, когда он появится.
+    gpu_on = plan.cuda_works or (rep.cuda_installed and not plan.cuda)
     device = "cuda" if gpu_on else "auto"
     compute = "float16" if gpu_on else "int8"
     model = plan.whisper_model
@@ -475,6 +508,15 @@ def update_config(plan: Plan, rep) -> None:
         except Exception as e:
             out(f"  Не удалось обновить config.yaml: {e}")
 
+    # Предупредим, если выбранная модель не влезет в видеопамять
+    if gpu_on and model and rep.gpu.present:
+        allowed = rep.gpu.recommended_models()
+        if allowed and model not in allowed:
+            out()
+            out(f"  [ВНИМАНИЕ] модель «{model}» может не поместиться в "
+                f"{rep.gpu.memory_mb / 1024:.0f} ГБ видеопамяти.")
+            out(f"  Для вашей карты подойдёт: {allowed[-1]}")
+
 
 # ------------------------------------------------------------------ main
 def main() -> int:
@@ -501,6 +543,13 @@ def main() -> int:
         out("[ОШИБКА] Нужен Python 3.9 или новее.")
         out("Скачайте с https://www.python.org/downloads/")
         return 1
+
+    if sys.version_info >= (3, 13):
+        out()
+        out("[ВНИМАНИЕ] У вас Python "
+            f"{sys.version_info.major}.{sys.version_info.minor}.")
+        out("  Это очень свежая версия, и часть библиотек для неё пока не собрана.")
+        out("  Если установка будет падать, поставьте Python 3.12 — он проверен.")
 
     from glados import sysinfo
 
