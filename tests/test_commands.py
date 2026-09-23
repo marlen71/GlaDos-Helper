@@ -307,3 +307,62 @@ def test_list_reminders_variants(router, phrase):
 ])
 def test_shutdown_word_boundaries(router, phrase, should_stop):
     assert router.handle(phrase).stop is should_stop
+
+
+# --------------------------- пунктуация от распознавания речи (регрессия)
+@pytest.mark.parametrize("phrase", [
+    "открой яндекс, музыка.",
+    "открой яндекс музыку",
+    "включи музыку",
+    "запусти яндекс мьюзик",
+    "открой яндекс-музыка",
+    "включи музыка!",
+])
+def test_yandex_music_with_any_punctuation(router, monkeypatch, phrase):
+    """Распознавание ставит запятые и точки как попало — это не должно мешать."""
+    called = {}
+    monkeypatch.setattr("glados.skills.apps.open_target",
+                        lambda t: called.setdefault("t", t) or True)
+    router.handle(phrase)
+    assert "YandexMusic" in called.get("t", "")
+
+
+def test_normalize_strips_punctuation():
+    from glados.commands import normalize
+
+    assert normalize("открой яндекс, музыка.") == "открой яндекс музыка"
+    assert normalize("спасибо!") == "спасибо"
+    assert normalize("открой   яндекс    музыку") == "открой яндекс музыку"
+
+
+def test_normalize_keeps_dots_in_numbers():
+    """Точки в датах и «кс 1.6» терять нельзя."""
+    from glados.commands import normalize
+
+    assert "1.6" in normalize("открой игру кс 1.6")
+    assert "23.09.2026" in normalize("напомни 23.09.2026 в 08:00")
+
+
+def test_command_with_trailing_period(router, monkeypatch):
+    monkeypatch.setattr("glados.skills.apps.open_target", lambda t: True)
+    assert "Время" in router.handle("сколько время?").reply
+
+
+# ------------------------------------ запуск не должен засорять консоль
+def test_spawn_flags_silence_child_output():
+    """Логи запущенной программы не должны сыпаться в окно помощника."""
+    import subprocess
+
+    from glados.skills.apps import _spawn_flags
+
+    flags = _spawn_flags()
+    assert flags["stdout"] == subprocess.DEVNULL
+    assert flags["stderr"] == subprocess.DEVNULL
+    assert flags["stdin"] == subprocess.DEVNULL
+
+
+def test_executable_part_strips_arguments():
+    from glados.skills.apps import _executable_part
+
+    got = _executable_part("C:/App/Update.exe --processStart App.exe")
+    assert got == "C:/App/Update.exe"

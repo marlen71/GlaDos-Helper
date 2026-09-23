@@ -14,28 +14,63 @@ def _expand(path: str) -> str:
     return os.path.expandvars(os.path.expanduser(path))
 
 
+def _spawn_flags() -> dict:
+    """Аргументы Popen, полностью отвязывающие приложение от нашей консоли.
+
+    Без этого запущенная программа наследует наше окно и её собственные логи
+    (например, служебные сообщения Electron у Яндекс Музыки или Discord)
+    сыплются поверх диалога с помощником.
+    """
+    kwargs: dict = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+    }
+    if sys.platform.startswith("win"):
+        # DETACHED_PROCESS — у приложения не будет нашей консоли
+        # CREATE_NEW_PROCESS_GROUP — Ctrl+C в нашем окне его не убьёт
+        flags = 0x00000008 | 0x00000200
+        flags |= getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
+        kwargs["creationflags"] = flags
+    else:
+        kwargs["start_new_session"] = True
+    return kwargs
+
+
 def open_target(target: str) -> bool:
-    """Универсальный запуск: URL, команда start, exe-путь, имя в PATH."""
+    """Универсальный запуск: URL, команда start, exe-путь, имя в PATH.
+
+    Приложение запускается отвязанным от консоли помощника, чтобы его
+    служебный вывод не мешал диалогу.
+    """
     target = _expand(str(target)).strip()
     if not target:
         return False
+
+    flags = _spawn_flags()
     try:
         if target.startswith(("http://", "https://", "steam://")):
             webbrowser.open(target)
             return True
+
         if sys.platform.startswith("win"):
             if target.lower().startswith("start "):
-                subprocess.Popen(target, shell=True)
-            elif os.path.exists(target.split(" --")[0]):
-                subprocess.Popen(target, shell=True)
+                subprocess.Popen(target, shell=True, **flags)
+            elif os.path.exists(_executable_part(target)):
+                subprocess.Popen(target, shell=True, **flags)
             else:
                 os.startfile(target)  # type: ignore[attr-defined]
         else:
-            subprocess.Popen(target, shell=True)
+            subprocess.Popen(target, shell=True, **flags)
         return True
     except Exception as e:
         log.error("Не удалось запустить %r: %s", target, e)
         return False
+
+
+def _executable_part(target: str) -> str:
+    """Путь к файлу без аргументов командной строки."""
+    return target.split(" --")[0].strip('"')
 
 
 def open_app(cfg, key: str) -> bool:
