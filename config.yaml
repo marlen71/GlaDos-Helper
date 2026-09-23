@@ -1,0 +1,97 @@
+# ============================================================
+#  GLaDOS Helper — основной конфиг
+# ============================================================
+
+user:
+  # Как Гладос к вам обращается
+  name: "Марлен"
+  title: "сэр"           # сэр / мэм / "" (пусто — без обращения)
+  birthday: "10.11"      # ДД.ММ — в этот день поздравит
+  timezone: "Europe/Moscow"
+
+wake:
+  # Слова активации (любая форма). Гладос реагирует, если фраза начинается с них.
+  words: ["гладос", "глaдос", "gladys", "glados", "глэдос", "гладис"]
+  # Если true — после ответа 10 сек можно говорить без слова активации
+  followup_seconds: 10
+
+stt:
+  engine: "faster-whisper"
+  # tiny / base / small / medium / large-v3
+  # Примерная задержка ответа на CPU:
+  #   tiny ~0.4с | base ~0.7с | small ~1.5с | medium ~4с | large-v3 ~10с и больше
+  # Для коротких команд "small" — лучший баланс. Хотите быстрее — ставьте "base".
+  model: "small"
+  # auto / cpu / cuda
+  # "auto" сам включит GPU, если найдены рабочие CUDA-библиотеки (cuBLAS + cuDNN).
+  # Если указать "cuda" без них — Гладос предупредит и продолжит на CPU, а не упадёт.
+  device: "auto"
+  # int8 (CPU) / float16 (GPU) — подбирается автоматически под устройство
+  compute_type: "int8"
+  beam_size: 1           # 1 = быстрее всего, 5 = точнее, но заметно медленнее
+  language: "ru"
+  # Порог громкости для детектора речи (0.0-1.0), подберите под микрофон
+  vad_threshold: 0.015
+  silence_seconds: 0.9   # тишина, после которой фраза считается законченной
+  max_phrase_seconds: 15
+
+tts:
+  engine: "silero"       # silero / sapi (запасной вариант Windows)
+  speaker: "baya"        # baya / kseniya / xenia / aidar / eugene
+  sample_rate: 48000
+  # --- Эффект "голос GLaDOS" ---
+  glados_effect:
+    enabled: true
+    pitch_semitones: -1.5   # чуть ниже
+    robot_depth: 0.35       # кольцевая модуляция (металл)
+    robot_freq: 62          # Гц несущей
+    flanger: 0.25           # лёгкий флэнжер
+    reverb: 0.22            # холодное эхо лаборатории Aperture
+    drive: 1.15             # мягкая перегрузка
+
+apps:
+  # Команда -> путь/URL. Поддерживаются %ENV% переменные Windows.
+  browser: "start chrome"
+  steam: "C:/Program Files (x86)/Steam/steam.exe"
+  discord: "%LOCALAPPDATA%/Discord/Update.exe --processStart Discord.exe"
+  youtube: "https://www.youtube.com"
+  telegram: "%LOCALAPPDATA%/Telegram Desktop/Telegram.exe"
+  explorer: "explorer.exe"
+  spotify: "spotify"
+  yandex_music: "%LOCALAPPDATA%/Programs/YandexMusic/Яндекс Музыка.exe"
+
+games:
+  # "как говорю" -> steam AppID (запуск через steam://rungameid/)
+  "портал 2": 620
+  "portal 2": 620
+  "контра": 730
+  "кс2": 730
+  "cs2": 730
+  "дота": 570
+  "dota": 570
+  "ведьмак 3": 292030
+  "террария": 105600
+  "гаррис мод": 4000
+  "гарис мод": 4000
+  "garry's mod": 4000
+  "гмод": 4000
+  "ксго": 4465480
+  "кс го": 4465480
+  "csgo": 4465480
+  "кс 1.6": 10
+  "кс 1 6": 10
+  "контра 1.6": 10
+  "counter-strike 1.6": 10
+  # Можно указать и прямой путь к exe:
+  # "майнкрафт": "C:/Games/Minecraft/launcher.exe"
+
+power:
+  shutdown_delay: 20     # сек до выключения (можно отменить: "гладос отмена")
+  reboot_delay: 15
+  confirm: true          # спрашивать подтверждение
+
+storage:
+  notes_file: "data/notes.md"
+  reminders_file: "data/reminders.json"
+
+log_level: "INFO"

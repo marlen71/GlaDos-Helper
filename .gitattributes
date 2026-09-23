@@ -1,0 +1,6 @@
+# .bat: храним байты как есть (CRLF), чтобы cmd не ломался при любом способе скачивания
+*.bat -text
+*.py text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf

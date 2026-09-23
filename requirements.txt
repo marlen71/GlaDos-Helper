@@ -1,0 +1,19 @@
+# --- Ядро ---
+numpy>=1.24
+sounddevice>=0.4.6
+soundfile>=0.12.1
+scipy>=1.11
+
+# --- Распознавание речи (STT) ---
+faster-whisper>=1.0.3
+
+# --- Синтез речи (TTS) ---
+torch>=2.1            # для Silero TTS (CPU-версии достаточно)
+torchaudio>=2.1
+
+# --- Утилиты ---
+pyperclip>=1.8.2
+python-dateutil>=2.8.2
+psutil>=5.9
+PyYAML>=6.0
+rich>=13.0
