@@ -39,7 +39,15 @@ class Assistant:
             print(f"GLaDOS: {text}")
 
     def _remind(self, text: str) -> None:
-        self.say(f"Напоминание, {self.persona.short}: {text}.")
+        import random
+
+        lead = random.choice([
+            f"Напоминаю, {self.persona.short}:",
+            f"{self.persona.address}, вы просили напомнить:",
+            f"Время пришло, {self.persona.short}:",
+            "Небольшое напоминание:",
+        ])
+        self.say(f"{lead} {text}.")
 
     def process(self, phrase: str, require_wake: bool = True) -> bool:
         """Обрабатывает фразу. Возвращает True, если команда была принята."""

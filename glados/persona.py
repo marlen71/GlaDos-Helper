@@ -10,6 +10,8 @@ class Persona:
         self.name = cfg.get_path("user.name", "")
         self.title = cfg.get_path("user.title", "сэр")
         self.birthday = cfg.get_path("user.birthday", "")
+        words = cfg.get_path("wake.words", []) or []
+        self.assistant_name = str(words[0]).capitalize() if words else ""
 
     # --- обращения ---
     @property
@@ -51,6 +53,10 @@ class Persona:
             f"Слушаюсь, {self.short}.",
             f"Выполняю, {self.short}.",
             f"Разумеется, {self.short}. Уже делаю.",
+            f"Один момент, {self.short}.",
+            f"Считайте, что готово, {self.short}.",
+            "Запускаю.",
+            f"Как пожелаете, {self.short}.",
         ])
 
     def done(self) -> str:
@@ -63,8 +69,10 @@ class Persona:
     def unknown(self) -> str:
         return random.choice([
             f"Простите, {self.short}, я не поняла команду.",
-            f"Эта фраза не входит в мой протокол, {self.short}. Повторите, пожалуйста.",
+            f"Не расслышала, {self.short}. Повторите, пожалуйста.",
             f"Не распознала задачу, {self.short}. Попробуйте сформулировать иначе.",
+            f"Такой команды я пока не знаю, {self.short}.",
+            f"Можете сказать иначе, {self.short}? Я не уловила смысл.",
         ])
 
     def farewell(self) -> str:

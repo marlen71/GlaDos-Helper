@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .fuzzy import match_any, sounds_like
 from .persona import Persona
+from .smalltalk import SmallTalk, maybe_banter
 from .skills import apps, notes, power
 from .skills.reminders import ReminderStore, parse_when
 from .textnum import date_to_words, time_to_words
@@ -76,6 +77,16 @@ def _has(text: str, *words) -> bool:
     return any(w in text for w in words)
 
 
+def _word(text: str, *words) -> bool:
+    """Совпадение по ЦЕЛОМУ слову.
+
+    Нужно там, где подстрока даёт ложные срабатывания: «покажи» содержит
+    «пока», «выходные» содержит «выход».
+    """
+    tokens = set(re.findall(r"\w+", text, flags=re.U))
+    return any(w in tokens for w in words)
+
+
 class CommandRouter:
     OPEN_VERBS = ("открой", "открыть", "включи", "включить", "запусти",
                   "запустить", "врубай", "врубить", "стартуй")
@@ -86,6 +97,10 @@ class CommandRouter:
         self.reminders = reminders
         self.notes_path = cfg.data_file("storage.notes_file", "data/notes.md")
         self._confirm: str | None = None
+        self.smalltalk = (SmallTalk(persona, cfg)
+                          if cfg.get_path("persona.smalltalk", True) else None)
+        self.banter = bool(cfg.get_path("persona.banter", True))
+        self.banter_chance = float(cfg.get_path("persona.banter_chance", 0.25))
 
     # ---------------------------------------------------------------- main
     def handle(self, raw: str) -> Result:
@@ -110,7 +125,9 @@ class CommandRouter:
             return Result(self.p.greeting())
 
         # --- Завершение работы ассистента ---
-        if (_has(text, "выключись", "отключись", "спи", "выход", "пока", "до свидания")
+        if (_word(text, "выключись", "отключись", "спи", "выход", "пока",
+                  "отбой", "выключайся")
+                or _has(text, "до свидания", "до встречи")
                 or re.search(r"(выключи|отключи|вырубай|заверши)\w*\s+(гладос|тебя|себя)", text)
                 or _has(text, "выключить гладос", "выключи гладос")):
             return Result(self.p.farewell(), stop=True)
@@ -135,28 +152,43 @@ class CommandRouter:
             return Result(f"Сегодня {reply}, {self.p.short}.")
 
         # --- Заметки ---
+        # Чтение проверяем ПЕРВЫМ: «прочитай заметки» иначе попадает в запись
+        if _has(text, "прочитай заметк", "прочти заметк", "мои заметк",
+                "последние заметк", "покажи заметк", "какие заметк",
+                "зачитай заметк"):
+            return self._read_notes()
         if _has(text, "заметк", "запиши в заметки", "заметку"):
             return self._note(text)
-        if _has(text, "прочитай заметки", "мои заметки", "последние заметки"):
-            items = notes.last_notes(self.notes_path)
-            if not items:
-                return Result(f"Заметок пока нет, {self.p.short}.")
-            body = "; ".join(i.split("] ", 1)[-1] for i in items)
-            return Result(f"Последние заметки: {body}.")
+
 
         # --- Напоминания ---
         if _has(text, "напомни", "напоминалк", "напоминание", "будильник", "таймер"):
             return self._reminder(raw)
-        if _has(text, "какие напоминания", "мои напоминания", "что запланировано"):
+        if _has(text, "какие напоминан", "мои напоминан", "что запланировано",
+                "покажи напоминан", "показать напоминан", "список напоминан",
+                "прочитай напоминан"):
             return self._list_reminders()
 
         # --- Запуск приложений и игр ---
         if text.startswith(self.OPEN_VERBS) or _has(text, *self.OPEN_VERBS):
             return self._open(text)
 
+        # Бытовая фраза — отвечаем по-человечески, а не «не поняла команду»
+        if self.smalltalk:
+            reply = self.smalltalk.handle(text)
+            if reply:
+                return Result(reply)
+
         return Result(self.p.unknown())
 
     # ------------------------------------------------------------- helpers
+    def _with_banter(self, reply: str) -> str:
+        """Иногда добавляет короткую реплику «от себя» — звучит живее."""
+        if not self.banter:
+            return reply
+        extra = maybe_banter(self.banter_chance)
+        return f"{reply} {extra}".strip() if extra else reply
+
     def _ask_power(self, action: str) -> Result:
         if self.cfg.get_path("power.confirm", True):
             self._confirm = action
@@ -202,7 +234,7 @@ class CommandRouter:
                                  key=lambda kv: -max(len(w) for w in kv[1])):
             if _has(text, *words):
                 if apps.open_app(self.cfg, key):
-                    return Result(self.p.ack())
+                    return Result(self._with_banter(self.p.ack()))
                 return Result(f"Не удалось запустить {words[0]}, {self.p.short}. "
                               f"Проверьте путь в config.yaml.")
 
@@ -213,6 +245,13 @@ class CommandRouter:
             if ok:
                 return Result(f"{self.p.ack()} Запускаю {name}.")
         return Result(f"Не знаю такого приложения, {self.p.short}.")
+
+    def _read_notes(self) -> Result:
+        items = notes.last_notes(self.notes_path)
+        if not items:
+            return Result(f"Заметок пока нет, {self.p.short}.")
+        body = "; ".join(i.split("] ", 1)[-1] for i in items)
+        return Result(f"Последние заметки: {body}.")
 
     def _note(self, text: str) -> Result:
         if _has(text, "буфер", "из буфера", "ссылку"):

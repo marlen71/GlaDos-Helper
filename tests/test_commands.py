@@ -221,3 +221,89 @@ def test_day_spoken_as_ordinal(day, expected):
     from glados.textnum import day_to_words
 
     assert day_to_words(day) == expected
+
+
+# ------------------------------------------------- живые реакции (small talk)
+@pytest.mark.parametrize("phrase", [
+    "спасибо", "спасибо большое", "благодарю", "спс",
+    "извини", "прости", "сорри",
+    "как дела", "как ты", "чем занимаешься",
+    "молодец", "умница", "хорошая работа",
+    "спокойной ночи", "доброй ночи",
+    "кто ты", "как тебя зовут", "ты робот",
+    "что ты умеешь", "какие команды",
+    "расскажи анекдот", "пошути",
+    "мне скучно", "я устал", "хочу есть",
+    "ты меня слышишь", "что делаешь",
+    "ты живая", "люблю тебя", "ты тупая",
+])
+def test_smalltalk_gives_real_answer(router, phrase):
+    """На бытовые фразы не должно быть «не поняла команду»."""
+    reply = router.handle(phrase).reply
+    assert reply
+    assert "не поняла" not in reply.lower()
+    assert "не распознала" not in reply.lower()
+    assert "не входит в мой протокол" not in reply.lower()
+
+
+def test_smalltalk_can_be_disabled(tmp_path):
+    from glados.commands import CommandRouter
+    from glados.config import Config
+    from glados.persona import Persona
+    from glados.skills.reminders import ReminderStore
+
+    cfg = Config.load()
+    cfg["persona"] = {"smalltalk": False}
+    cfg["storage"] = {"notes_file": str(tmp_path / "n.md"),
+                      "reminders_file": str(tmp_path / "r.json")}
+    r = CommandRouter(cfg, Persona(cfg), ReminderStore(tmp_path / "r.json"))
+    reply = r.handle("спасибо").reply.lower()
+    # При выключенной болтовне должен сработать обычный ответ «не понял»
+    assert any(k in reply for k in ("не поняла", "не расслышала",
+                                    "не распознала", "не знаю", "иначе"))
+
+
+def test_smalltalk_does_not_hijack_commands(router):
+    """Бытовые слова внутри команды не должны ломать саму команду."""
+    assert "Записала" in router.handle("запиши в заметки спасибо за помощь").reply
+    assert "Время" in router.handle("сколько время").reply
+
+
+def test_replies_vary(router):
+    """Ответы не должны повторяться подряд — иначе звучит как автоответчик."""
+    seen = {router.handle("спасибо").reply for _ in range(12)}
+    assert len(seen) >= 3
+
+
+# ------------------------------------------------ регрессии на целые слова
+def test_show_notes_does_not_shut_down(router):
+    """«покажи заметки» содержит «пока» — не должно завершать работу."""
+    router.handle("запиши в заметки тест")
+    res = router.handle("покажи заметки")
+    assert not res.stop
+    assert "тест" in res.reply
+
+
+@pytest.mark.parametrize("phrase", [
+    "прочитай заметки", "мои заметки", "покажи заметки", "какие заметки",
+])
+def test_read_notes_variants(router, phrase):
+    router.handle("запиши в заметки молоко")
+    assert "молоко" in router.handle(phrase).reply
+
+
+@pytest.mark.parametrize("phrase", [
+    "какие напоминания", "покажи напоминания", "показать напоминания",
+    "список напоминаний",
+])
+def test_list_reminders_variants(router, phrase):
+    router.handle("напомни выпить воды завтра в 9")
+    assert "выпить воды" in router.handle(phrase).reply
+
+
+@pytest.mark.parametrize("phrase,should_stop", [
+    ("пока", True), ("выключись", True), ("до свидания", True),
+    ("отбой", True), ("покажи заметки", False), ("показать напоминания", False),
+])
+def test_shutdown_word_boundaries(router, phrase, should_stop):
+    assert router.handle(phrase).stop is should_stop
