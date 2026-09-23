@@ -70,14 +70,25 @@ def main() -> int:
 
     print("\nУскорение (GPU):")
     try:
+        from glados import sysinfo
         from glados.stt import cuda_is_usable
 
-        if cuda_is_usable():
-            print("  [OK]   CUDA доступна — можно ставить stt.device: cuda")
+        gpu = sysinfo.detect_gpu()
+        if gpu.present:
+            mem = f", {gpu.memory_mb / 1024:.0f} ГБ" if gpu.memory_mb else ""
+            print(f"  [OK]   Видеокарта: {gpu.name}{mem}")
+            if gpu.driver_cuda:
+                print(f"         Драйвер поддерживает CUDA {gpu.driver_cuda}")
         else:
-            print("  [НЕТ]  рабочие CUDA-библиотеки не найдены — Гладос будет "
-                  "работать на процессоре")
-            print("         (это нормально; для GPU нужны cuBLAS и cuDNN, см. README)")
+            print("  [нет]  Видеокарта NVIDIA не найдена")
+
+        if cuda_is_usable():
+            print("  [OK]   CUDA работает — можно ставить stt.device: cuda")
+        elif gpu.present and gpu.supports_cu12:
+            print("  [НЕТ]  библиотеки CUDA не установлены")
+            print("         Установить: install-gpu.bat  (или install.bat -> пункт 2)")
+        else:
+            print("  [НЕТ]  ускорение недоступно — Гладос работает на процессоре")
     except Exception as e:
         print(f"  не удалось проверить: {e}")
 
